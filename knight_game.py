@@ -4,6 +4,15 @@ import pygame
 import kg_objects as ko 
 from kg_objects import Board, Grid, Unit_s, Unit_k, Blocker_x, Uid, coord_init
 
+def get_cell_mouseover(grid):
+    cells = grid.cell_rects
+    point = pygame.mouse.get_pos()
+    for i, cell in enumerate(cells):
+        if cell.collidepoint(point):
+            return i
+
+    return -1
+
 def main():
     pygame.init()
     pygame.font.init()
@@ -13,8 +22,8 @@ def main():
     pygame.display.set_caption("Knight Game")
 
 
-    g0 = Grid(win_w, win_h)
-    b0 = Board(g0) 
+    grid = Grid(win_w, win_h)
+    board = Board(grid) 
 
     ## defining units
     units = []
@@ -23,17 +32,18 @@ def main():
         if (val < 0):
             pass
         elif (val < 4):
-            units.append(Unit_s(g0, coord_init[val], 1, val))
+            units.append(Unit_s(grid, coord_init[val], 1, val))
         elif (val < 7):
-            units.append(Unit_k(g0, coord_init[val], 1, val))
+            units.append(Unit_k(grid, coord_init[val], 1, val))
         elif (val < 11):
-            units.append(Unit_s(g0, coord_init[val], 2, val))
+            units.append(Unit_s(grid, coord_init[val], 2, val))
         elif (val < 14):
-            units.append(Unit_k(g0, coord_init[val], 2, val))
+            units.append(Unit_k(grid, coord_init[val], 2, val))
 
     # states
     done = False
     moving = False
+    drop = False
     clock = pygame.time.Clock()
 
     ## main loop
@@ -48,24 +58,31 @@ def main():
                     moving = True
                 elif moving == True:
                     moving = False
+                    drop = True
 
         screen.fill(ko.cBGND)
 
-        b0.draw(screen)
-        g0.draw(screen)
+        board.draw(screen)
+        grid.draw(screen)
 
         print (pygame.mouse.get_pos())
         for u in units:
             u.draw(screen)
             if moving == False:
-                if u.get_rect().collidepoint(pygame.mouse.get_pos()):
+                if u.rect.collidepoint(pygame.mouse.get_pos()):
                     print ('The mouse cursor is hovering over {}'.format(u._uid))
                     mouse_on_unit = u._uid
+
+        cell_mouseover = get_cell_mouseover(grid)
+        print(cell_mouseover)
 
         if moving == True:
             print ('now moving {}'.format(mouse_on_unit))
             units[mouse_on_unit]._x, units[mouse_on_unit]._y = pygame.mouse.get_pos()
-
+            
+        if drop == True:
+            units[mouse_on_unit]._x, units[mouse_on_unit]._y = grid.cells[cell_mouseover].center
+            drop = False
 
         ## flush
         pygame.display.flip()

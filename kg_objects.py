@@ -35,27 +35,43 @@ class Grid:
     def __init__(self, win_w, win_h):
         self._h = win_h * 0.8
         self._w = self._h * 7./8
-        self._grid = grid0 * self._h / 7
-        self._cell_w  = self._grid[0, 1, 0] - self._grid[0, 0, 0]
-        self._cell_h = self._grid[1, 0, 1] - self._grid[0, 0, 1]
         self._x = (win_w - self._w)/2
         self._y = (win_h - self._h)/2
-        self._grid[:, :, 0] += self._x
-        self._grid[:, :, 1] += self._y
-        self._stat = np.zeros((7, 8))
+
+        self._grid_pos = grid0 * self._h / 7
+        self._grid_pos[:, :, 0] += self._x
+        self._grid_pos[:, :, 1] += self._y
+        self._grid_stat = np.zeros(56) - 1
+        self._grid_idx = [(i, j) for j in range(8) for i in range(7)]
+
+        self._cell_w = self._grid_pos[0, 1, 0] - self._grid_pos[0, 0, 0]
+        self._cell_h = self._grid_pos[1, 0, 1] - self._grid_pos[0, 0, 1]
+        self._cell_rects = [] 
+        self._define_cell_rects()
 
     def draw(self, screen):
         # Horizontal lines
         for i in range(7):
-            pygame.draw.line(screen, cBLACK, self._grid[0, i], self._grid[-1, i], 1)
+            pygame.draw.line(screen, cBLACK, self._grid_pos[0, i], self._grid_pos[-1, i], 1)
 
         # Vertical lines
         for i in range(8):  
-            pygame.draw.line(screen, cBLACK, self._grid[i, 0], self._grid[i, -1], 1)
+            pygame.draw.line(screen, cBLACK, self._grid_pos[i, 0], self._grid_pos[i, -1], 1)
+
+    def _define_cell_rects(self):
+        for i in range(8):
+            for j in range(7):
+                rect = pygame.Rect((0, 0), (self._cell_w, self._cell_h)) 
+                rect.center = (self._grid_pos[i, j, 0], self._grid_pos[i, j, 1])
+                self._cell_rects.append(rect)
 
     @property
-    def grid(self):
-        return self._grid
+    def grid_pos(self):
+        return self._grid_pos
+
+    @property
+    def cell_rects(self):
+        return self._cell_rects
 
 
 class Board:
@@ -77,11 +93,11 @@ class Unit:
     def __init__(self, grid, coord, side, uid):
         self._grid = grid
         self._i, self_j = coord 
-        self._x, self._y = self._grid.grid[self._i, self._j]
+        self._x, self._y = self._grid.grid_pos[self._i, self._j]
         self._side = side
-        self._grid._stat[self._i, self._j] = self._side
-        self._is_alive = 1
         self._uid = uid
+        self._grid._stat[coord2idx(self._i, self._j)] = self._uid
+        self._is_alive = 1
         self._rect = []
 
     def draw_octagon(self, screen):
@@ -92,12 +108,17 @@ class Unit:
         self._rect = obj
 
     def move(self, coord):
-        self._grid._stat[self._i, self._j] = -1
+        self._grid._stat[coord2idx(self._i, self._j)] = -1
         self._i, self._j = coord
-        self._grid._stat[self._i, self._j] = self._uid
-        self._x, self._y = self._grid.grid[self._i, self._j]
+        self._grid._stat[coord2idx(self._i, self._j)] = self._uid
+        self._x, self._y = self._grid.grid_pos[self._i, self._j]
+        self._set_movable_cells()
 
-    def get_rect(self):
+    #def _set_movable_cells()
+    #    pass
+
+    @property
+    def rect(self):
         return self._rect
 
 
@@ -105,13 +126,15 @@ class Unit_s(Unit):
     def __init__(self, grid, coord, side, uid):
         self._grid = grid
         self._i, self._j = coord
-        self._x, self._y = self._grid.grid[self._i, self._j]
+        self._x, self._y = self._grid.grid_pos[self._i, self._j]
         self._side = side
         self._uid = uid
-        self._grid._stat[self._i, self._j] = self._uid
+        self._grid._stat[coord2idx(self._i, self._j)] = self._uid
         self._is_alive = 1
         self._scale = grid._cell_w / 2 * 0.7
         self._rect = []
+        self._movable_cells = []
+        self._set_movable_cells()
 
     def draw_s(self, screen):
         if self._side == 1:
@@ -129,15 +152,28 @@ class Unit_s(Unit):
         self.draw_octagon(screen)
         self.draw_s(screen)
 
+    def _set_movable_cells(self):
+        if self._i > 0:
+            self._movable_cells.append(coord2idx(self._i-1, self._j))
+        if self._j > 0:
+            self._movable_cells.append(coord2idx(self._i, self._j-1))
+        if self._j < 7:
+            self._movable_cells.append(coord2idx(self._i, self._j+1))
+        if self._i < 8:
+            self._movable_cells.append(coord2idx(self._i+1, self._j))
+
+    @property
+    def movable_cells(self)
+        return self._movable_cells
 
 class Unit_k(Unit):
     def __init__(self, grid, coord, side, uid):
         self._grid = grid
         self._i, self._j = coord 
-        self._x, self._y = self._grid.grid[self._i, self._j]
+        self._x, self._y = self._grid.grid_pos[self._i, self._j]
         self._side = side
         self._uid = uid
-        self._grid._stat[self._i, self._j] = self._uid
+        self._grid._stat[coord2idx(self._i, self._j)] = self._uid
         self._is_alive = 1
         self._scale = grid._cell_w / 2 
         self._rect = []
@@ -158,8 +194,23 @@ class Unit_k(Unit):
         self.draw_octagon(screen)
         self.draw_k(screen)
 
+    def _set_movable_cells(self):
+        if self._i > 0:
+            self._movable_cells.append(coord2idx(self._i-1, self._j))
+        if self._j > 0:
+            self._movable_cells.append(coord2idx(self._i, self._j-1))
+        if self._j < 7:
+            self._movable_cells.append(coord2idx(self._i, self._j+1))
+        if self._i < 8:
+            self._movable_cells.append(coord2idx(self._i+1, self._j))
+    @property
+    def movable_cells(self)
+        return self._movable_cells
+
 
 class Blocker_x:
     pass
 
+def coord2idx(i, j):
+    return i * 7 + j
 
