@@ -17,18 +17,19 @@ octagon0 = np.array([np.cos(ang), np.sin(ang)]).T
 polygon_s0 = np.array([[0,0], [1, 0], [1, 1], [0, 1]]) - np.array((0.5, 0.5))
 polygon_k0 = np.array([[0,0], [1, 0], [1, 1], [0, 1]]) - np.array((0.5, 0.5))
 
-coord_init = [ [2, 0], [2, 2], [2, 4], [2, 6],
-              [1, 1], [1, 3], [1, 5],
-              [5, 0], [5, 2], [5, 4], [5, 6],
-              [6, 1], [6, 3], [6, 5]]
+coord_init = [[[2, 0], [2, 2], [2, 4], [2, 6], # red s
+               [1, 1], [1, 3], [1, 5]],        # red k
+              [[5, 0], [5, 2], [5, 4], [5, 6], # blue s
+               [6, 1], [6, 3], [6, 5]]]        # blue k
 
+imax = 7
+jmax = 6
 
 class Uid(enum.Enum):
-    empty = -1
-    r_s1 = 0; r_s2 = 1; r_s3 = 2; r_s4 = 3;
-    r_k1 = 4; r_k2 = 5; r_k3 = 6;
-    b_s1 = 7; b_s2 = 8; b_s3 = 9; b_s4 = 10;
-    b_k1 = 11; b_k2 = 12; b_k3 = 13;
+    empty = -99;
+    s1 = 0; s2 = 1; s3 = 2; s4 = 3;
+    k1 = 4; k2 = 5; k3 = 6; 
+    x = 99;
 
 
 class Grid:
@@ -41,7 +42,7 @@ class Grid:
         self._grid_pos = grid0 * self._h / 7
         self._grid_pos[:, :, 0] += self._x
         self._grid_pos[:, :, 1] += self._y
-        self._grid_stat = np.zeros(56) - 1
+        self._grid_stat = np.full(56, Uid.empty.value, dtype=int)
         self._grid_idx = [(i, j) for j in range(8) for i in range(7)]
 
         self._cell_w = self._grid_pos[0, 1, 0] - self._grid_pos[0, 0, 0]
@@ -71,7 +72,11 @@ class Grid:
 
     @property
     def cell_rects(self):
-        return self._cell_rects
+        return self._cell_rects 
+
+    @property
+    def stat(self):
+        return self._grid_stat
 
 
 class Board:
@@ -96,30 +101,51 @@ class Unit:
         self._x, self._y = self._grid.grid_pos[self._i, self._j]
         self._side = side
         self._uid = uid
-        self._grid._stat[coord2idx(self._i, self._j)] = self._uid
+        self._grid.stat[coord2idx(self._i, self._j)] = self._uid
         self._is_alive = 1
         self._rect = []
+        self._movable_cells = []
+        self.set_movable_cells()
 
     def draw_octagon(self, screen):
         octagon_s = octagon0 * self._scale + np.array([self._x, self._y])
         shadow_s = (octagon0 + 0.1)* self._scale + np.array([self._x, self._y])
         pygame.draw.polygon(screen, sBGND, shadow_s, 0)
         obj = pygame.draw.polygon(screen, cWHITE, octagon_s, 0)
+        pygame.draw.polygon(screen, cBLACK, octagon_s, 1)
         self._rect = obj
 
-    def move(self, coord):
-        self._grid._stat[coord2idx(self._i, self._j)] = -1
-        self._i, self._j = coord
-        self._grid._stat[coord2idx(self._i, self._j)] = self._uid
-        self._x, self._y = self._grid.grid_pos[self._i, self._j]
-        self._set_movable_cells()
+    def move(self, dest):
+        if dest in self._movable_cells: 
+            orig = coord2idx(self._i, self._j)
+            self._grid.stat[orig] = Uid.empty.value
+            self._i, self._j = idx2coord(dest)
+            self._grid.stat[dest] = self._uid
+            self._x, self._y = self._grid.grid_pos[self._i, self._j]
+            self.set_movable_cells()
+        else:
+            self._x, self._y = self._grid.grid_pos[self._i, self._j]
+            self.set_movable_cells()
 
-    #def _set_movable_cells()
-    #    pass
+    def set_movable_cells(self):
+        pass
+
+    def draw_movable_cells(self, screen):
+        for idx in self._movable_cells:
+            pos = self._grid._grid_pos[idx2coord(idx)]
+            pygame.draw.circle(screen, cGREEN, (int(pos[0]), int(pos[1])), 15, 5)
 
     @property
     def rect(self):
         return self._rect
+
+    @property
+    def movable_cells(self):
+        return self._movable_cells
+
+    @property
+    def uid(self):
+        return self._uid
 
 
 class Unit_s(Unit):
@@ -129,17 +155,17 @@ class Unit_s(Unit):
         self._x, self._y = self._grid.grid_pos[self._i, self._j]
         self._side = side
         self._uid = uid
-        self._grid._stat[coord2idx(self._i, self._j)] = self._uid
+        self._grid.stat[coord2idx(self._i, self._j)] = self._uid
         self._is_alive = 1
         self._scale = grid._cell_w / 2 * 0.7
         self._rect = []
         self._movable_cells = []
-        self._set_movable_cells()
+        self.set_movable_cells()
 
     def draw_s(self, screen):
-        if self._side == 1:
+        if self._side == 0:
             color = cRED
-        elif self._side == 2:
+        elif self._side == 1:
             color = cBLUE
 
         font_s = pygame.font.SysFont(None, 50)
@@ -152,19 +178,25 @@ class Unit_s(Unit):
         self.draw_octagon(screen)
         self.draw_s(screen)
 
-    def _set_movable_cells(self):
+    def set_movable_cells(self):
+        self._movable_cells = []
         if self._i > 0:
-            self._movable_cells.append(coord2idx(self._i-1, self._j))
+            dest = coord2idx(self._i-1, self._j)
+            if self._grid.stat[dest] == Uid.empty.value:
+                self._movable_cells.append(dest)
         if self._j > 0:
-            self._movable_cells.append(coord2idx(self._i, self._j-1))
-        if self._j < 7:
-            self._movable_cells.append(coord2idx(self._i, self._j+1))
-        if self._i < 8:
-            self._movable_cells.append(coord2idx(self._i+1, self._j))
+            dest = coord2idx(self._i, self._j-1)
+            if self._grid.stat[dest] == Uid.empty.value:
+                self._movable_cells.append(dest)
+        if self._j < 6:
+            dest = coord2idx(self._i, self._j+1)
+            if self._grid.stat[dest] == Uid.empty.value:
+                self._movable_cells.append(dest)
+        if self._i < 7:
+            dest = coord2idx(self._i+1, self._j)
+            if self._grid.stat[dest] == Uid.empty.value:
+                self._movable_cells.append(dest)
 
-    @property
-    def movable_cells(self)
-        return self._movable_cells
 
 class Unit_k(Unit):
     def __init__(self, grid, coord, side, uid):
@@ -173,15 +205,17 @@ class Unit_k(Unit):
         self._x, self._y = self._grid.grid_pos[self._i, self._j]
         self._side = side
         self._uid = uid
-        self._grid._stat[coord2idx(self._i, self._j)] = self._uid
+        self._grid.stat[coord2idx(self._i, self._j)] = self._uid
         self._is_alive = 1
         self._scale = grid._cell_w / 2 
         self._rect = []
+        self._movable_cells = []
+        self.set_movable_cells()
 
     def draw_k(self, screen):
-        if self._side == 1:
+        if self._side == 0:
             color = cRED
-        else:
+        elif self._side ==1:
             color = cBLUE
 
         font_s = pygame.font.SysFont(None, 70)
@@ -194,23 +228,118 @@ class Unit_k(Unit):
         self.draw_octagon(screen)
         self.draw_k(screen)
 
-    def _set_movable_cells(self):
-        if self._i > 0:
-            self._movable_cells.append(coord2idx(self._i-1, self._j))
-        if self._j > 0:
-            self._movable_cells.append(coord2idx(self._i, self._j-1))
-        if self._j < 7:
-            self._movable_cells.append(coord2idx(self._i, self._j+1))
-        if self._i < 8:
-            self._movable_cells.append(coord2idx(self._i+1, self._j))
+    def set_movable_cells(self):
+        self._movable_cells = []
+        if self._i > 1:
+            stopover = coord2idx(self._i-1, self._j)
+            if self._grid.stat[stopover] == Uid.empty.value:
+                if self._j > 0:
+                    dest = coord2idx(self._i-2, self._j-1)
+                    if self._grid.stat[dest] == Uid.empty.value:
+                        print ("#1")
+                        self._movable_cells.append(dest)
+                if self._j < jmax:
+                    dest = coord2idx(self._i-2, self._j+1)
+                    if self._grid.stat[dest] == Uid.empty.value:
+                        print ("#2")
+                        self._movable_cells.append(dest)
+            
+        if self._j > 1:
+            stopover = coord2idx(self._i, self._j-1)
+            if self._grid.stat[stopover] == Uid.empty.value:
+                if self._i > 0:
+                    dest = coord2idx(self._i-1, self._j-2)
+                    if self._grid.stat[dest] == Uid.empty.value:
+                        print ("#3")
+                        self._movable_cells.append(dest)
+                if self._i < imax:
+                    dest = coord2idx(self._i+1, self._j-2)
+                    if self._grid.stat[dest] == Uid.empty.value:
+                        print ("#4")
+                        self._movable_cells.append(dest)
+
+        if self._j < jmax-1:
+            stopover = coord2idx(self._i, self._j+1)
+            if self._grid.stat[stopover] == Uid.empty.value:
+                if self._i > 0:
+                    dest = coord2idx(self._i-1, self._j+2)
+                    if self._grid.stat[dest] == Uid.empty.value:
+                        print ("#5")
+                        self._movable_cells.append(dest)
+                if self._i < imax:
+                    dest = coord2idx(self._i+1, self._j+2)
+                    if self._grid.stat[dest] == Uid.empty.value:
+                        print ("#6")
+                        self._movable_cells.append(dest)
+
+        if self._i < imax-1:
+            stopover = coord2idx(self._i+1, self._j)
+            if self._grid.stat[stopover] == Uid.empty.value:
+                if self._j > 0:
+                    dest = coord2idx(self._i+2, self._j-1)
+                    if self._grid.stat[dest] == Uid.empty.value:
+                        print ("#7")
+                        self._movable_cells.append(dest)
+                if self._j < jmax:
+                    dest = coord2idx(self._i+2, self._j+1)
+                    if self._grid.stat[dest] == Uid.empty.value:
+                        print ("#8")
+                        self._movable_cells.append(dest)
+        return
+
+
+class Team:
+    def __init__(self, grid, side):
+        self._grid = grid
+        self._units = []
+        self._side = side
+        self.max_x = 56
+        self.cnt_x = 0
+        self.cnt_alive_s = 4
+        self.cnt_alive_k = 3
+        self.set_units()
+
+    def set_units(self):
+        for unit_id in Uid: 
+            if unit_id.value < 0:
+                pass
+            elif unit_id.value < 4:
+                self._units.append(
+                    Unit_s(
+                        self._grid, 
+                        coord_init[self._side][unit_id.value], 
+                        self._side, 
+                        self._side*7+unit_id.value
+                        )
+                    )
+            elif unit_id.value < 7:
+                self._units.append(
+                    Unit_k(
+                        self._grid, 
+                        coord_init[self._side][unit_id.value], 
+                        self._side, 
+                        self._side*7+unit_id.value
+                        )
+                    )
+        return
+
+    def draw_units(self, screen):
+        for u in self._units:
+            if u._is_alive:
+                u.draw(screen)
+
     @property
-    def movable_cells(self)
-        return self._movable_cells
+    def units(self):
+        return self._units
 
 
 class Blocker_x:
     pass
 
-def coord2idx(i, j):
-    return i * 7 + j
 
+def coord2idx(i, j):
+    return i*7 + j
+
+
+def idx2coord(idx):
+    return divmod(idx, 7)

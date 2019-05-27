@@ -2,16 +2,11 @@ import numpy as np
 import pygame
 
 import kg_objects as ko 
-from kg_objects import Board, Grid, Unit_s, Unit_k, Blocker_x, Uid, coord_init
-
-def get_cell_mouseover(grid):
-    cells = grid.cell_rects
-    point = pygame.mouse.get_pos()
-    for i, cell in enumerate(cells):
-        if cell.collidepoint(point):
-            return i
-
-    return -1
+from kg_objects import Board, Grid, Unit_s, Unit_k, \
+                       Blocker_x, Uid, coord_init, Team, \
+                       coord2idx, idx2coord
+from kg_routines import get_cell_mouseover, get_unit_mouseover, \
+                        mouse_down
 
 def main():
     pygame.init()
@@ -21,71 +16,80 @@ def main():
     screen = pygame.display.set_mode([win_w, win_h])
     pygame.display.set_caption("Knight Game")
 
-
     grid = Grid(win_w, win_h)
     board = Board(grid) 
 
     ## defining units
+    red = Team(grid, 0)
+    blue = Team(grid, 1)
+    
     units = []
-    for name in Uid:
-        val = name.value
-        if (val < 0):
-            pass
-        elif (val < 4):
-            units.append(Unit_s(grid, coord_init[val], 1, val))
-        elif (val < 7):
-            units.append(Unit_k(grid, coord_init[val], 1, val))
-        elif (val < 11):
-            units.append(Unit_s(grid, coord_init[val], 2, val))
-        elif (val < 14):
-            units.append(Unit_k(grid, coord_init[val], 2, val))
-
+    units = [u for u in red.units] + [u for u in blue.units]
+    unit_indicies = list(range(len(units)))
+    
     # states
-    done = False
-    moving = False
-    drop = False
+    flag_done = False
+    flag_moving = False
+    flag_drop = False
     clock = pygame.time.Clock()
 
+    cell_mouseover = -1
+    mouse_on_unit = -1
+
     ## main loop
-    while not done:
-        clock.tick(10)
+    while not flag_done:
+        clock.tick(1000)
 
+        # event loop
         for event in pygame.event.get():
+            # quit 
             if event.type == pygame.QUIT:
-                done = True
+                flag_done = True
+            # mouse button down
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                if moving == False: 
-                    moving = True
-                elif moving == True:
-                    moving = False
-                    drop = True
+                if flag_moving == False: 
+                    if mouse_on_unit in unit_indicies: 
+                        flag_moving = True
+                elif flag_moving == True:
+                    if mouse_on_unit in unit_indicies: 
+                        flag_drop = True
 
+        # draw
         screen.fill(ko.cBGND)
-
         board.draw(screen)
         grid.draw(screen)
+        red.draw_units(screen)
+        blue.draw_units(screen)
 
-        print (pygame.mouse.get_pos())
-        for u in units:
-            u.draw(screen)
-            if moving == False:
-                if u.rect.collidepoint(pygame.mouse.get_pos()):
-                    print ('The mouse cursor is hovering over {}'.format(u._uid))
-                    mouse_on_unit = u._uid
+        #state machine
+        if flag_moving == False:
+            cell_mouseover = get_cell_mouseover(grid)
+            mouse_on_unit = get_unit_mouseover(units)
+            #print ('cell_mouseover is {}, mouse_on_unit {}'.format(cell_mouseover, mouse_on_unit))
 
-        cell_mouseover = get_cell_mouseover(grid)
-        print(cell_mouseover)
-
-        if moving == True:
-            print ('now moving {}'.format(mouse_on_unit))
-            units[mouse_on_unit]._x, units[mouse_on_unit]._y = pygame.mouse.get_pos()
+        if flag_moving == True:
+            #print ('now moving {}'.format(mouse_on_unit))
+            cell_mouseover = get_cell_mouseover(grid)
+            if mouse_on_unit in unit_indicies: 
+                units[mouse_on_unit].set_movable_cells()
+                units[mouse_on_unit].draw(screen)
+                units[mouse_on_unit].draw_movable_cells(screen)
+                units[mouse_on_unit]._x, units[mouse_on_unit]._y = pygame.mouse.get_pos()
             
-        if drop == True:
-            units[mouse_on_unit]._x, units[mouse_on_unit]._y = grid.cells[cell_mouseover].center
-            drop = False
+        if flag_drop == True:
+            if mouse_on_unit in unit_indicies: 
+                units[mouse_on_unit].move(cell_mouseover)
+            mouse_on_unit = Uid.empty.value
+            flag_moving = False
+            flag_drop = False
+
+        #print (grid.stat.reshape(8,7))
 
         ## flush
+        #print (clock.tick())
         pygame.display.flip()
+
+    print ("Bye bye :)")
 
 
 if __name__=='__main__':
