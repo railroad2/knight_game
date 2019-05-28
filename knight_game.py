@@ -1,14 +1,27 @@
 import numpy as np
 import pygame
 
-import kg_objects as ko 
-from kg_objects import Board, Grid, Unit_s, Unit_k, \
-                       Blocker_x, Uid, coord_init, Team, \
-                       coord2idx, idx2coord
-from kg_routines import get_cell_mouseover, get_unit_mouseover, \
-                        mouse_down
+from kg_objects import Board, Grid, Unit_s, Unit_k, Blocker_x, Uid, coord_init, Team
+from kg_tools import get_cell_mouseover, get_unit_mouseover, coord2idx, idx2coord
 
-def main():
+from kg_main import Knight_game
+from kg_draw import Draw_ui
+
+def doit():
+    pygame.init()
+    pygame.font.init()
+    win_w = 800
+    win_h = win_w * 3 // 4
+    screen = pygame.display.set_mode([win_w, win_h])
+    clock_tick = 100
+
+    kg = Knight_game(screen, clock_tick)
+    kg.initialize()
+    kg.main_loop()
+
+    print ("Bye bye :)")
+
+def old_doit():
     pygame.init()
     pygame.font.init()
     win_w = 800
@@ -93,6 +106,6 @@ def main():
 
 
 if __name__=='__main__':
-    main()
+    doit()
 
 
